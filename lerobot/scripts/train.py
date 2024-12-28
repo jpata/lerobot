@@ -425,7 +425,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         dataloading_s = time.perf_counter() - start_time
 
         for key in batch:
-            batch[key] = batch[key].to(device, non_blocking=True)
+            batch[key] = batch[key].to(device, non_blocking=False)
 
         train_info = update_policy(
             policy,
@@ -548,7 +548,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                     online_rollout_policy,
                     n_episodes=cfg.training.online_rollout_n_episodes,
                     max_episodes_rendered=min(10, cfg.training.online_rollout_n_episodes),
-                    videos_dir=logger.log_dir / "online_rollout_videos",
+                    videos_dir=logger.log_dir / "online_rollout_videos" / str(online_step),
                     return_episode_data=True,
                     start_seed=(
                         rollout_start_seed := (rollout_start_seed + cfg.training.batch_size) % 1000000
@@ -579,6 +579,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
             return online_rollout_s, update_online_buffer_s
 
+        # online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
         future = executor.submit(sample_trajectory_and_update_buffer)
         # If we aren't doing async rollouts, or if we haven't yet gotten enough examples in our buffer, wait
         # here until the rollout and buffer update is done, before proceeding to the policy update steps.
@@ -602,7 +603,9 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                 dataloading_s = time.perf_counter() - start_time
 
             for key in batch:
-                batch[key] = batch[key].to(cfg.device, non_blocking=True)
+                if batch[key].dtype == torch.float64:
+                    batch[key] = batch[key].to(torch.float32)
+                batch[key] = batch[key].to(cfg.device, non_blocking=False)
 
             train_info = update_policy(
                 policy,
