@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-export PYTHONPATH=./:../gym_so100
+export PYTHONPATH=./:../gym-so100
 export HYDRA_FULL_ERROR=1
 
 export MUJOCO_GL=glfw
@@ -17,7 +17,7 @@ python lerobot/scripts/train.py \
     training.log_freq=1 \
     training.eval_freq=10000 \
     training.offline_steps=0 \
-    training.online_steps=1000 \
+    training.online_steps=5000 \
     training.online_rollout_n_episodes=10 \
     training.online_rollout_batch_size=10 \
     training.online_steps_between_rollouts=100 \
@@ -27,7 +27,7 @@ python lerobot/scripts/train.py \
     training.do_online_rollout_async=false  \
     training.save_freq=50000 \
     training.save_checkpoint=true \
-    training.num_workers=1 \
+    training.num_workers=4 \
     eval.batch_size=50 \
     eval.n_episodes=50 \
     eval.use_async_envs=false \
