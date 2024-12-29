@@ -2,7 +2,7 @@
 
 export PYTHONPATH=`pwd`:`pwd`/../gym-so100
 export DISPLAY=0
-export MUJOCO_GL=egl #glfw
+export MUJOCO_GL=egl
 export JOB_NAME=tdmpc_so100_kp
 
 python lerobot/scripts/train.py \
