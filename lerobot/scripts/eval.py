@@ -137,7 +137,7 @@ def rollout(
     # Keep track of which environments are done.
     done = np.array([False] * env.num_envs)
     # max_steps = env.call("_max_episode_steps")[0]
-    max_steps = 800
+    max_steps = 2000
     progbar = trange(
         max_steps,
         desc=f"Running rollout with at most {max_steps} steps",
@@ -167,7 +167,7 @@ def rollout(
         # VectorEnv stores is_success in `info["final_info"][env_index]["is_success"]`. "final_info" isn't
         # available of none of the envs finished.
         if "final_info" in info:
-            successes = [info["is_success"] if info is not None else False for info in info["final_info"]]
+            successes = [(_info["is_success"] if "is_success" in _info else False) for _info in info["final_info"]]
         else:
             successes = [False] * env.num_envs
 

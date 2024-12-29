@@ -1,11 +1,9 @@
 #!/bin/bash 
 
-export PYTHONPATH=./:../gym-so100
-export HYDRA_FULL_ERROR=1
-
-export MUJOCO_GL=glfw
-JOB_NAME=tdmpc_so100_kp
-
+export PYTHONPATH=`pwd`:`pwd`/../gym-so100
+export DISPLAY=0
+export MUJOCO_GL=egl #glfw
+export JOB_NAME=tdmpc_so100_kp
 
 python lerobot/scripts/train.py \
     hydra.job.name=$JOB_NAME \
@@ -31,6 +29,8 @@ python lerobot/scripts/train.py \
     eval.batch_size=50 \
     eval.n_episodes=50 \
     eval.use_async_envs=false \
-    device=mps \
+    device=cuda \
     use_amp=true \
+    wandb.enable=true \
+    wandb.disable_artifact=true \
     resume=false

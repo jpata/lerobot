@@ -44,7 +44,7 @@ policy:
   n_action_steps: 5
 
   input_shapes:
-    observation.environment_state: [3]
+    observation.environment_state: [9]
     observation.state: ["${env.state_dim}"]
   output_shapes:
     action: ["${env.action_dim}"]
