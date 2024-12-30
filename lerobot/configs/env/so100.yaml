@@ -17,5 +17,5 @@ env:
   fps: ${fps}
   episode_length: 300
   gym:
-    observation_mode: both
+    observation_mode: state
     render_mode: human

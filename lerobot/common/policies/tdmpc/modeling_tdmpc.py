@@ -164,6 +164,7 @@ class TDMPCPolicy(
                 # sequence dimension like in the MPC branch.
                 actions = self.model.pi(z).unsqueeze(0)
 
+
             actions = torch.clamp(actions, -1, +1)
             actions = self.unnormalize_outputs({"action": actions})["action"]
 
