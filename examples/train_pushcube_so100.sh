@@ -25,7 +25,7 @@ python lerobot/scripts/train.py \
     training.do_online_rollout_async=false  \
     training.save_freq=50000 \
     training.save_checkpoint=true \
-    training.num_workers=0 \
+    training.num_workers=4 \
     eval.batch_size=50 \
     eval.n_episodes=50 \
     eval.use_async_envs=false \

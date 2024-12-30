@@ -490,6 +490,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
     # Create dataloader for online training.
     concat_dataset = torch.utils.data.ConcatDataset([offline_dataset, online_dataset])
+
     sampler_weights = compute_sampler_weights(
         offline_dataset,
         offline_drop_n_last_frames=cfg.training.get("drop_n_last_frames", 0),
@@ -504,6 +505,15 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         num_samples=len(concat_dataset),
         replacement=True,
     )
+    def my_collate_fn(batches):
+        batches_dropped = []
+        for b in batches:
+            for key_to_drop in ["seed", "next.done", "task_index"]:
+                if key_to_drop in b:
+                    del b[key_to_drop]
+            batches_dropped.append(b)  
+        return torch.utils.data.dataloader.default_collate(batches_dropped)
+        
     dataloader = torch.utils.data.DataLoader(
         concat_dataset,
         batch_size=cfg.training.batch_size,
@@ -511,6 +521,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=True,
+        collate_fn=my_collate_fn
     )
     dl_iter = cycle(dataloader)
 
