@@ -6,7 +6,7 @@ calibration:
   axis_directions: [-1, 1, 1, 1, 1, 1]
   offsets: [0, 0, 0, 0, 0, 0]
 
-state_keys: {"observation.state": "agent_pos", "observation.environment_state": "env_state"}
+state_keys: {"observation.state": "agent_pos", "observation.environment_state": "environment_state"}
 
 env:
   name: so100
