@@ -507,7 +507,9 @@ if __name__ == "__main__":
     importlib.import_module(f"gym_{env_cfg.env.name}")
 
     def env_constructor():
-        return gym.make(env_cfg.env.handle, disable_env_checker=True, **env_cfg.env.gym)
+        package_name = f"gym_{env_cfg.env.name}"
+        gym_handle = f"{package_name}/{env_cfg.env.task}"
+        return gym.make(gym_handle, disable_env_checker=True, **env_cfg.env.gym)
 
     robot = None
     process_leader_actions_fn = None

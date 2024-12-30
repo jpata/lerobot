@@ -14,7 +14,7 @@ python lerobot/scripts/train.py \
     policy=tdmpc_pushcube_so100 \
     training.log_freq=1 \
     training.eval_freq=10000 \
-    training.offline_steps=0 \
+    training.offline_steps=100 \
     training.online_steps=5000 \
     training.online_rollout_n_episodes=10 \
     training.online_rollout_batch_size=10 \

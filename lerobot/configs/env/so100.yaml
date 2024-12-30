@@ -2,6 +2,12 @@
 
 fps: 10
 
+calibration:
+  axis_directions: [-1, 1, 1, 1, 1, 1]
+  offsets: [0, 0, 0, 0, 0, 0]
+
+state_keys: {"observation.state": "agent_pos", "observation.environment_state": "environment_state"}
+
 env:
   name: so100
   task: PushCube-v0
@@ -11,5 +17,5 @@ env:
   fps: ${fps}
   episode_length: 300
   gym:
-    observation_mode: state
-    render_mode: rgb_array
+    observation_mode: both
+    render_mode: human

@@ -165,7 +165,7 @@ class TDMPCPolicy(
                 actions = self.model.pi(z).unsqueeze(0)
 
             actions = torch.clamp(actions, -1, +1)
-            # actions = self.unnormalize_outputs({"action": actions})["action"]
+            actions = self.unnormalize_outputs({"action": actions})["action"]
 
             if self.config.n_action_repeats > 1:
                 for _ in range(self.config.n_action_repeats):

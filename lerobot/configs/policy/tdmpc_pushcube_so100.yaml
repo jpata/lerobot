@@ -1,7 +1,7 @@
 # @package _global_
 
 seed: 19123
-dataset_repo_id: jpata/so100_pick_place_tangerine
+dataset_repo_id: jpata/so100_pushcube_sim
 
 training:
   offline_steps: 0
