@@ -40,7 +40,7 @@ policy:
 
   # Input / output structure.
   n_action_repeats: 1
-  horizon: 5
+  horizon: 10
   n_action_steps: 5
 
   input_shapes:
