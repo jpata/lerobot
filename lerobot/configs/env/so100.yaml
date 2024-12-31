@@ -1,6 +1,6 @@
 # @package _global_
 
-fps: 10
+fps: 30
 
 calibration:
   axis_directions: [-1, 1, 1, 1, 1, 1]

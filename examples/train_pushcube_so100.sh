@@ -15,10 +15,10 @@ python lerobot/scripts/train.py \
     training.log_freq=1 \
     training.eval_freq=10000 \
     training.offline_steps=0 \
-    training.online_steps=5000 \
-    training.online_rollout_n_episodes=10 \
-    training.online_rollout_batch_size=10 \
-    training.online_steps_between_rollouts=100 \
+    training.online_steps=10s0000 \
+    training.online_rollout_n_episodes=100 \
+    training.online_rollout_batch_size=100 \
+    training.online_steps_between_rollouts=1000 \
     training.online_buffer_capacity=40000 \
     training.online_buffer_seed_size=0 \
     training.online_sampling_ratio=0.8 \
