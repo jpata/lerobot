@@ -576,7 +576,7 @@ class TDMPCTOLD(nn.Module):
                 nn.Sequential(
                     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
                     nn.LayerNorm(config.mlp_dim),
-                    nn.Tanh(),
+                    nn.Mish(),
                     nn.Linear(config.mlp_dim, config.mlp_dim),
                     nn.ELU(),
                     nn.Linear(config.mlp_dim, 1),
@@ -587,7 +587,7 @@ class TDMPCTOLD(nn.Module):
         self._V = nn.Sequential(
             nn.Linear(config.latent_dim, config.mlp_dim),
             nn.LayerNorm(config.mlp_dim),
-            nn.Tanh(),
+            nn.Mish(),
             nn.Linear(config.mlp_dim, config.mlp_dim),
             nn.ELU(),
             nn.Linear(config.mlp_dim, 1),
