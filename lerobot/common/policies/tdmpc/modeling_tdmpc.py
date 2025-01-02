@@ -22,7 +22,7 @@ The comments in this code may sometimes refer to these references:
 """
 
 # ruff: noqa: N806
-
+from types import SimpleNamespace
 from collections import deque
 from copy import deepcopy
 from functools import partial
@@ -534,6 +534,65 @@ class TDMPCPolicy(
         # we update every step and adjust the decay parameter `alpha` accordingly (0.99 -> 0.995)
         update_ema_parameters(self.model_target, self.model, self.config.target_model_momentum)
 
+class SimNorm(nn.Module):
+    """
+    Simplicial normalization.
+    Adapted from https://arxiv.org/abs/2204.00616.
+    """
+
+    def __init__(self, cfg):
+        super().__init__()
+        self.dim = cfg.simnorm_dim
+
+    def forward(self, x):
+        shp = x.shape
+        x = x.view(*shp[:-1], -1, self.dim)
+        x = F.softmax(x, dim=-1)
+        return x.view(*shp)
+
+    def __repr__(self):
+        return f"SimNorm(dim={self.dim})"
+
+
+class NormedLinear(nn.Linear):
+    """
+    Linear layer with LayerNorm, activation, and optionally dropout.
+    """
+
+    def __init__(self, *args, dropout=0., act=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ln = nn.LayerNorm(self.out_features)
+        if act is None:
+            act = nn.Mish(inplace=False)
+        self.act = act
+        self.dropout = nn.Dropout(dropout, inplace=False) if dropout else None
+
+    def forward(self, x):
+        x = super().forward(x)
+        if self.dropout:
+            x = self.dropout(x)
+        return self.act(self.ln(x))
+
+    def __repr__(self):
+        repr_dropout = f", dropout={self.dropout.p}" if self.dropout else ""
+        return f"NormedLinear(in_features={self.in_features}, "\
+            f"out_features={self.out_features}, "\
+            f"bias={self.bias is not None}{repr_dropout}, "\
+            f"act={self.act.__class__.__name__})"
+
+def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0.):
+    """
+    Basic building block of TD-MPC2.
+    MLP with LayerNorm, Mish activations, and optionally dropout.
+    """
+    if isinstance(mlp_dims, int):
+        mlp_dims = [mlp_dims]
+    dims = [in_dim] + mlp_dims + [out_dim]
+    mlp = nn.ModuleList()
+    for i in range(len(dims) - 2):
+        mlp.append(NormedLinear(dims[i], dims[i+1], dropout=dropout*(i==0)))
+    mlp.append(NormedLinear(dims[-2], dims[-1], act=act) if act else nn.Linear(dims[-2], dims[-1]))
+    return nn.Sequential(*mlp)
 
 class TDMPCTOLD(nn.Module):
     """Task-Oriented Latent Dynamics (TOLD) model used in TD-MPC."""
@@ -542,17 +601,24 @@ class TDMPCTOLD(nn.Module):
         super().__init__()
         self.config = config
         self._encoder = TDMPCObservationEncoder(config)
-        self._dynamics = nn.Sequential(
-            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.latent_dim),
-            nn.LayerNorm(config.latent_dim),
-            nn.Sigmoid(),
+#        self._dynamics = nn.Sequential(
+#            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+#            nn.LayerNorm(config.mlp_dim),
+#            nn.Mish(),
+#            nn.Linear(config.mlp_dim, config.mlp_dim),
+#            nn.LayerNorm(config.mlp_dim),
+#            nn.Mish(),
+#            nn.Linear(config.mlp_dim, config.latent_dim),
+#            nn.LayerNorm(config.latent_dim),
+#            nn.Sigmoid(),
+#        )
+        self._dynamics = mlp(
+            config.latent_dim + config.output_shapes["action"][0],
+            [config.mlp_dim, config.mlp_dim],
+            config.latent_dim,
+            act=nn.Sigmoid()
         )
+
         self._reward = nn.Sequential(
             nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
             nn.LayerNorm(config.mlp_dim),
@@ -562,36 +628,59 @@ class TDMPCTOLD(nn.Module):
             nn.Mish(),
             nn.Linear(config.mlp_dim, 1),
         )
-        self._pi = nn.Sequential(
-            nn.Linear(config.latent_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
+#        self._reward = mlp(
+#            config.latent_dim + config.output_shapes["action"][0],
+#            1,
+#            [config.mlp_dim, config.mlp_dim],
+#        )
+
+#        self._pi = nn.Sequential(
+#            nn.Linear(config.latent_dim, config.mlp_dim),
+#            nn.LayerNorm(config.mlp_dim),
+#            nn.Mish(),
+#            nn.Linear(config.mlp_dim, config.mlp_dim),
+#            nn.LayerNorm(config.mlp_dim),
+#            nn.Mish(),
+#            nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
+#        )
+        self._pi = mlp(
+            config.latent_dim,
+            [config.mlp_dim, config.mlp_dim],
+            config.output_shapes["action"][0],
+            act=SimNorm(SimpleNamespace(simnorm_dim=config.output_shapes["action"][0]))
         )
+
         self._Qs = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-                    nn.LayerNorm(config.mlp_dim),
-                    nn.Mish(),
-                    nn.Linear(config.mlp_dim, config.mlp_dim),
-                    nn.ELU(),
-                    nn.Linear(config.mlp_dim, 1),
-                )
+#                nn.Sequential(
+#                    nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+#                    nn.LayerNorm(config.mlp_dim),
+#                    nn.Mish(),
+#                    nn.Linear(config.mlp_dim, config.mlp_dim),
+#                    nn.ELU(),
+#                    nn.Linear(config.mlp_dim, 1),
+#                )
+                mlp(
+                    config.latent_dim + config.output_shapes["action"][0],
+                    [config.mlp_dim, config.mlp_dim],
+                    1,
+                )      
                 for _ in range(config.q_ensemble_size)
             ]
         )
-        self._V = nn.Sequential(
-            nn.Linear(config.latent_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.ELU(),
-            nn.Linear(config.mlp_dim, 1),
-        )
+#        self._V = nn.Sequential(
+#            nn.Linear(config.latent_dim, config.mlp_dim),
+#            nn.LayerNorm(config.mlp_dim),
+#            nn.Mish(),
+#            nn.Linear(config.mlp_dim, config.mlp_dim),
+#            nn.ELU(),
+#            nn.Linear(config.mlp_dim, 1),
+#        )
+        self._V = mlp(
+            config.latent_dim,
+            [config.mlp_dim, config.mlp_dim],
+            1,
+        )      
         self._init_weights()
 
     def _init_weights(self):
@@ -679,7 +768,7 @@ class TDMPCTOLD(nn.Module):
         """
         return self._V(z).squeeze(-1)
 
-    def Qs(self, z: Tensor, a: Tensor, return_min: bool = False) -> Tensor:  # noqa: N802
+    def Qs(self, z: Tensor, a: Tensor, return_min: bool = True) -> Tensor:  # noqa: N802
         """Predict state-action value for all of the learned Q functions.
 
         Args:
@@ -739,22 +828,34 @@ class TDMPCObservationEncoder(nn.Module):
                 )
             )
         if "observation.state" in config.input_shapes:
-            self.state_enc_layers = nn.Sequential(
-                nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
-                nn.ELU(),
-                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-                nn.LayerNorm(config.latent_dim),
-                nn.Sigmoid(),
+            # self.state_enc_layers = nn.Sequential(
+            #     nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
+            #     nn.ELU(),
+            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+            #     nn.LayerNorm(config.latent_dim),
+            #     nn.Sigmoid(),
+            # )
+            self.state_enc_layers = mlp(
+                config.input_shapes["observation.state"][0],
+                [config.state_encoder_hidden_dim],
+                config.latent_dim,
+                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
             )
         if "observation.environment_state" in config.input_shapes:
-            self.env_state_enc_layers = nn.Sequential(
-                nn.Linear(
-                    config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
-                ),
-                nn.ELU(),
-                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-                nn.LayerNorm(config.latent_dim),
-                nn.Sigmoid(),
+            # self.env_state_enc_layers = nn.Sequential(
+            #     nn.Linear(
+            #         config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
+            #     ),
+            #     nn.ELU(),
+            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+            #     nn.LayerNorm(config.latent_dim),
+            #     nn.Sigmoid(),
+            # )
+            self.env_state_enc_layers = mlp(
+                config.input_shapes["observation.environment_state"][0],
+                [config.state_encoder_hidden_dim],
+                config.latent_dim,
+                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
             )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
