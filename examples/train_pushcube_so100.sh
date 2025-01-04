@@ -21,7 +21,7 @@ python lerobot/scripts/train.py \
     training.online_steps_between_rollouts=1000 \
     training.online_buffer_capacity=40000 \
     training.online_buffer_seed_size=0 \
-    training.online_sampling_ratio=0.8 \
+    training.online_sampling_ratio=0.5 \
     training.do_online_rollout_async=false  \
     training.save_freq=50000 \
     training.save_checkpoint=true \
