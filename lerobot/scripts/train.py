@@ -50,6 +50,14 @@ from lerobot.common.utils.utils import (
 )
 from lerobot.scripts.eval import eval_policy
 
+def my_collate_fn(batches):
+    batches_dropped = []
+    for b in batches:
+        for key_to_drop in ["seed", "next.done", "task_index"]:
+            if key_to_drop in b:
+                del b[key_to_drop]
+        batches_dropped.append(b)  
+    return torch.utils.data.dataloader.default_collate(batches_dropped)
 
 def make_optimizer_and_scheduler(cfg, policy):
     if cfg.policy.name == "act":
@@ -505,14 +513,6 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         num_samples=len(concat_dataset),
         replacement=True,
     )
-    def my_collate_fn(batches):
-        batches_dropped = []
-        for b in batches:
-            for key_to_drop in ["seed", "next.done", "task_index"]:
-                if key_to_drop in b:
-                    del b[key_to_drop]
-            batches_dropped.append(b)  
-        return torch.utils.data.dataloader.default_collate(batches_dropped)
         
     dataloader = torch.utils.data.DataLoader(
         concat_dataset,

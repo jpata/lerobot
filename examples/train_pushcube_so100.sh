@@ -16,12 +16,12 @@ python lerobot/scripts/train.py \
     training.eval_freq=10000 \
     training.offline_steps=0 \
     training.online_steps=100000 \
-    training.online_rollout_n_episodes=100 \
-    training.online_rollout_batch_size=100 \
+    training.online_rollout_n_episodes=50 \
+    training.online_rollout_batch_size=50 \
     training.online_steps_between_rollouts=1000 \
     training.online_buffer_capacity=40000 \
     training.online_buffer_seed_size=0 \
-    training.online_sampling_ratio=0.9 \
+    training.online_sampling_ratio=0.8 \
     training.do_online_rollout_async=false  \
     training.save_freq=50000 \
     training.save_checkpoint=true \

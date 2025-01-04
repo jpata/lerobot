@@ -601,23 +601,23 @@ class TDMPCTOLD(nn.Module):
         super().__init__()
         self.config = config
         self._encoder = TDMPCObservationEncoder(config)
-#        self._dynamics = nn.Sequential(
-#            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-#            nn.LayerNorm(config.mlp_dim),
-#            nn.Mish(),
-#            nn.Linear(config.mlp_dim, config.mlp_dim),
-#            nn.LayerNorm(config.mlp_dim),
-#            nn.Mish(),
-#            nn.Linear(config.mlp_dim, config.latent_dim),
-#            nn.LayerNorm(config.latent_dim),
-#            nn.Sigmoid(),
-#        )
-        self._dynamics = mlp(
-            config.latent_dim + config.output_shapes["action"][0],
-            [config.mlp_dim, config.mlp_dim],
-            config.latent_dim,
-            act=nn.Sigmoid()
+        self._dynamics = nn.Sequential(
+            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.latent_dim),
+            nn.LayerNorm(config.latent_dim),
+            nn.Sigmoid(),
         )
+        # self._dynamics = mlp(
+        #     config.latent_dim + config.output_shapes["action"][0],
+        #     [config.mlp_dim, config.mlp_dim],
+        #     config.latent_dim,
+        #     act=nn.Sigmoid()
+        # )
 
         self._reward = nn.Sequential(
             nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
@@ -634,53 +634,53 @@ class TDMPCTOLD(nn.Module):
 #            [config.mlp_dim, config.mlp_dim],
 #        )
 
-#        self._pi = nn.Sequential(
-#            nn.Linear(config.latent_dim, config.mlp_dim),
-#            nn.LayerNorm(config.mlp_dim),
-#            nn.Mish(),
-#            nn.Linear(config.mlp_dim, config.mlp_dim),
-#            nn.LayerNorm(config.mlp_dim),
-#            nn.Mish(),
-#            nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
-#        )
-        self._pi = mlp(
-            config.latent_dim,
-            [config.mlp_dim, config.mlp_dim],
-            config.output_shapes["action"][0],
-            act=SimNorm(SimpleNamespace(simnorm_dim=config.output_shapes["action"][0]))
+        self._pi = nn.Sequential(
+            nn.Linear(config.latent_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
         )
+        # self._pi = mlp(
+        #     config.latent_dim,
+        #     [config.mlp_dim, config.mlp_dim],
+        #     config.output_shapes["action"][0],
+        #     act=SimNorm(SimpleNamespace(simnorm_dim=config.output_shapes["action"][0]))
+        # )
 
         self._Qs = nn.ModuleList(
             [
-#                nn.Sequential(
-#                    nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-#                    nn.LayerNorm(config.mlp_dim),
-#                    nn.Mish(),
-#                    nn.Linear(config.mlp_dim, config.mlp_dim),
-#                    nn.ELU(),
-#                    nn.Linear(config.mlp_dim, 1),
-#                )
-                mlp(
-                    config.latent_dim + config.output_shapes["action"][0],
-                    [config.mlp_dim, config.mlp_dim],
-                    1,
-                )      
+               nn.Sequential(
+                   nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+                   nn.LayerNorm(config.mlp_dim),
+                   nn.Mish(),
+                   nn.Linear(config.mlp_dim, config.mlp_dim),
+                   nn.ELU(),
+                   nn.Linear(config.mlp_dim, 1),
+               )
+                # mlp(
+                #     config.latent_dim + config.output_shapes["action"][0],
+                #     [config.mlp_dim, config.mlp_dim],
+                #     1,
+                # )      
                 for _ in range(config.q_ensemble_size)
             ]
         )
-#        self._V = nn.Sequential(
-#            nn.Linear(config.latent_dim, config.mlp_dim),
-#            nn.LayerNorm(config.mlp_dim),
-#            nn.Mish(),
-#            nn.Linear(config.mlp_dim, config.mlp_dim),
-#            nn.ELU(),
-#            nn.Linear(config.mlp_dim, 1),
-#        )
-        self._V = mlp(
-            config.latent_dim,
-            [config.mlp_dim, config.mlp_dim],
-            1,
-        )      
+        self._V = nn.Sequential(
+            nn.Linear(config.latent_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.ELU(),
+            nn.Linear(config.mlp_dim, 1),
+        )
+        # self._V = mlp(
+        #     config.latent_dim,
+        #     [config.mlp_dim, config.mlp_dim],
+        #     1,
+        # )      
         self._init_weights()
 
     def _init_weights(self):
@@ -828,35 +828,35 @@ class TDMPCObservationEncoder(nn.Module):
                 )
             )
         if "observation.state" in config.input_shapes:
-            # self.state_enc_layers = nn.Sequential(
-            #     nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
-            #     nn.ELU(),
-            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-            #     nn.LayerNorm(config.latent_dim),
-            #     nn.Sigmoid(),
-            # )
-            self.state_enc_layers = mlp(
-                config.input_shapes["observation.state"][0],
-                [config.state_encoder_hidden_dim],
-                config.latent_dim,
-                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            self.state_enc_layers = nn.Sequential(
+                nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
+                nn.ELU(),
+                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+                nn.LayerNorm(config.latent_dim),
+                nn.Sigmoid(),
             )
+            # self.state_enc_layers = mlp(
+            #     config.input_shapes["observation.state"][0],
+            #     [config.state_encoder_hidden_dim],
+            #     config.latent_dim,
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            # )
         if "observation.environment_state" in config.input_shapes:
-            # self.env_state_enc_layers = nn.Sequential(
-            #     nn.Linear(
-            #         config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
-            #     ),
-            #     nn.ELU(),
-            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-            #     nn.LayerNorm(config.latent_dim),
-            #     nn.Sigmoid(),
-            # )
-            self.env_state_enc_layers = mlp(
-                config.input_shapes["observation.environment_state"][0],
-                [config.state_encoder_hidden_dim],
-                config.latent_dim,
-                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            self.env_state_enc_layers = nn.Sequential(
+                nn.Linear(
+                    config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
+                ),
+                nn.ELU(),
+                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+                nn.LayerNorm(config.latent_dim),
+                nn.Sigmoid(),
             )
+            # self.env_state_enc_layers = mlp(
+            #     config.input_shapes["observation.environment_state"][0],
+            #     [config.state_encoder_hidden_dim],
+            #     config.latent_dim,
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            # )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
         """Encode the image and/or state vector.
