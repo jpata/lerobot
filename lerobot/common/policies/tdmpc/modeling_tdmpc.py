@@ -628,11 +628,11 @@ class TDMPCTOLD(nn.Module):
         #     nn.Mish(),
         #     nn.Linear(config.mlp_dim, 1),
         # )
-       self._reward = mlp(
-           config.latent_dim + config.output_shapes["action"][0],
-           1,
-           [config.mlp_dim, config.mlp_dim],
-       )
+        self._reward = mlp(
+            config.latent_dim + config.output_shapes["action"][0],
+            1,
+            [config.mlp_dim, config.mlp_dim],
+        )
 
         # self._pi = nn.Sequential(
         #     nn.Linear(config.latent_dim, config.mlp_dim),
