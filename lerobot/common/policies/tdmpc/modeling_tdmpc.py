@@ -630,8 +630,8 @@ class TDMPCTOLD(nn.Module):
         # )
         self._reward = mlp(
             config.latent_dim + config.output_shapes["action"][0],
-            1,
             [config.mlp_dim, config.mlp_dim],
+            1,
         )
 
         # self._pi = nn.Sequential(
