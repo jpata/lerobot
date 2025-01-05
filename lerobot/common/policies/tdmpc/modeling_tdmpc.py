@@ -133,7 +133,7 @@ class TDMPCPolicy(
     @torch.no_grad()
     def select_action(self, batch: dict[str, Tensor]) -> Tensor:
         """Select a single action given environment observations."""
-        batch = self.normalize_inputs(batch)
+        # batch = self.normalize_inputs(batch)
         if self._use_image:
             batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
             batch["observation.image"] = batch[self.input_image_key]
@@ -164,9 +164,9 @@ class TDMPCPolicy(
                 # sequence dimension like in the MPC branch.
                 actions = self.model.pi(z).unsqueeze(0)
 
-
             actions = torch.clamp(actions, -1, +1)
-            actions = self.unnormalize_outputs({"action": actions})["action"]
+            # actions = self.unnormalize_outputs({"action": actions})["action"]
+            # print(z, actions)
 
             if self.config.n_action_repeats > 1:
                 for _ in range(self.config.n_action_repeats):
@@ -222,7 +222,7 @@ class TDMPCPolicy(
             mean[:-1] = self._prev_mean[1:]
         std = self.config.max_std * torch.ones_like(mean)
 
-        for _ in range(self.config.cem_iterations):
+        for cem_iter in range(self.config.cem_iterations):
             # Randomly sample action trajectories for the gaussian distribution.
             std_normal_noise = torch.randn(
                 self.config.horizon,
@@ -232,15 +232,17 @@ class TDMPCPolicy(
                 device=std.device,
             )
             gaussian_actions = torch.clamp(mean.unsqueeze(1) + std.unsqueeze(1) * std_normal_noise, -1, 1)
-
             # Compute elite actions.
             actions = torch.cat([gaussian_actions, pi_actions], dim=1)
             value = self.estimate_value(z, actions).nan_to_num_(0)
+            # if torch.all(value == 0):
+            #     raise Exception("Values are 0")
             elite_idxs = torch.topk(value, self.config.n_elites, dim=0).indices  # (n_elites, batch)
             elite_value = value.take_along_dim(elite_idxs, dim=0)  # (n_elites, batch)
             # (horizon, n_elites, batch, action_dim)
             elite_actions = actions.take_along_dim(einops.rearrange(elite_idxs, "n b -> 1 n b 1"), dim=1)
-
+            # print("elite_actions", cem_iter, elite_actions[0], value[0])
+ 
             # Update gaussian PDF parameters to be the (weighted) mean and standard deviation of the elites.
             max_value = elite_value.max(0, keepdim=True)[0]  # (1, batch)
             # The weighting is a softmax over trajectory values. Note that this is not the same as the usage
@@ -262,6 +264,7 @@ class TDMPCPolicy(
                 self.config.gaussian_mean_momentum * mean + (1 - self.config.gaussian_mean_momentum) * _mean
             )
             std = _std.clamp_(self.config.min_std, self.config.max_std)
+            # print("mean,std", cem_iter, mean, std)
 
         # Keep track of the mean for warm-starting subsequent steps.
         self._prev_mean = mean
@@ -328,12 +331,11 @@ class TDMPCPolicy(
         Returns a dictionary with loss as a tensor, and other information as native floats.
         """
         device = get_device_from_parameters(self)
-
-        batch = self.normalize_inputs(batch)
+        # batch = self.normalize_inputs(batch)
         if self._use_image:
             batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
             batch["observation.image"] = batch[self.input_image_key]
-        batch = self.normalize_targets(batch)
+        # batch = self.normalize_targets(batch)
 
         info = {}
 
@@ -619,68 +621,67 @@ class TDMPCTOLD(nn.Module):
         #     act=nn.Sigmoid()
         # )
 
-        # self._reward = nn.Sequential(
-        #     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-        #     nn.LayerNorm(config.mlp_dim),
-        #     nn.Mish(),
-        #     nn.Linear(config.mlp_dim, config.mlp_dim),
-        #     nn.LayerNorm(config.mlp_dim),
-        #     nn.Mish(),
-        #     nn.Linear(config.mlp_dim, 1),
-        # )
-        self._reward = mlp(
-            config.latent_dim + config.output_shapes["action"][0],
-            [config.mlp_dim, config.mlp_dim],
-            1,
+        self._reward = nn.Sequential(
+            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, 1),
         )
+        # self._reward = mlp(
+        #     config.latent_dim + config.output_shapes["action"][0],
+        #     [config.mlp_dim, config.mlp_dim],
+        #     1,
+        # )
 
-        # self._pi = nn.Sequential(
-        #     nn.Linear(config.latent_dim, config.mlp_dim),
-        #     nn.LayerNorm(config.mlp_dim),
-        #     nn.Mish(),
-        #     nn.Linear(config.mlp_dim, config.mlp_dim),
-        #     nn.LayerNorm(config.mlp_dim),
-        #     nn.Mish(),
-        #     nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
-        # )
-        self._pi = mlp(
-            config.latent_dim,
-            [config.mlp_dim, config.mlp_dim],
-            config.output_shapes["action"][0],
-            act=SimNorm(SimpleNamespace(simnorm_dim=config.output_shapes["action"][0]))
+        self._pi = nn.Sequential(
+            nn.Linear(config.latent_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.output_shapes["action"][0]),
         )
+        # self._pi = mlp(
+        #     config.latent_dim,
+        #     [config.mlp_dim, config.mlp_dim],
+        #     config.output_shapes["action"][0],
+        # )
 
         self._Qs = nn.ModuleList(
             [
-               # nn.Sequential(
-               #     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-               #     nn.LayerNorm(config.mlp_dim),
-               #     nn.Mish(),
-               #     nn.Linear(config.mlp_dim, config.mlp_dim),
-               #     nn.ELU(),
-               #     nn.Linear(config.mlp_dim, 1),
-               # )
-                mlp(
-                    config.latent_dim + config.output_shapes["action"][0],
-                    [config.mlp_dim, config.mlp_dim],
-                    1,
-                )      
+                nn.Sequential(
+                    nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+                    nn.LayerNorm(config.mlp_dim),
+                    nn.Mish(),
+                    nn.Linear(config.mlp_dim, config.mlp_dim),
+                    nn.ELU(),
+                    nn.Linear(config.mlp_dim, 1),
+                )
+                # mlp(
+                #     config.latent_dim + config.output_shapes["action"][0],
+                #     [config.mlp_dim, config.mlp_dim],
+                #     1,
+                # )      
                 for _ in range(config.q_ensemble_size)
             ]
         )
-        # self._V = nn.Sequential(
-        #     nn.Linear(config.latent_dim, config.mlp_dim),
-        #     nn.LayerNorm(config.mlp_dim),
-        #     nn.Mish(),
-        #     nn.Linear(config.mlp_dim, config.mlp_dim),
-        #     nn.ELU(),
-        #     nn.Linear(config.mlp_dim, 1),
-        # )
-        self._V = mlp(
-            config.latent_dim,
-            [config.mlp_dim, config.mlp_dim],
-            1,
-        )      
+        self._V = nn.Sequential(
+            nn.Linear(config.latent_dim, config.mlp_dim),
+            nn.LayerNorm(config.mlp_dim),
+            nn.Mish(),
+            nn.Linear(config.mlp_dim, config.mlp_dim),
+            nn.ELU(),
+            nn.Linear(config.mlp_dim, 1),
+        )
+        # self._V = mlp(
+        #     config.latent_dim,
+        #     [config.mlp_dim, config.mlp_dim],
+        #     1,
+        # )      
         self._init_weights()
 
     def _init_weights(self):
@@ -768,7 +769,7 @@ class TDMPCTOLD(nn.Module):
         """
         return self._V(z).squeeze(-1)
 
-    def Qs(self, z: Tensor, a: Tensor, return_min: bool = True) -> Tensor:  # noqa: N802
+    def Qs(self, z: Tensor, a: Tensor, return_min: bool = False) -> Tensor:  # noqa: N802
         """Predict state-action value for all of the learned Q functions.
 
         Args:
@@ -828,35 +829,35 @@ class TDMPCObservationEncoder(nn.Module):
                 )
             )
         if "observation.state" in config.input_shapes:
-            # self.state_enc_layers = nn.Sequential(
-            #     nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
-            #     nn.ELU(),
-            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-            #     nn.LayerNorm(config.latent_dim),
-            #     nn.Sigmoid(),
-            # )
-            self.state_enc_layers = mlp(
-                config.input_shapes["observation.state"][0],
-                [config.state_encoder_hidden_dim],
-                config.latent_dim,
-                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            self.state_enc_layers = nn.Sequential(
+                nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
+                nn.ELU(),
+                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+                nn.LayerNorm(config.latent_dim),
+                nn.Sigmoid(),
             )
+            # self.state_enc_layers = mlp(
+            #     config.input_shapes["observation.state"][0],
+            #     [config.state_encoder_hidden_dim],
+            #     config.latent_dim,
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            # )
         if "observation.environment_state" in config.input_shapes:
-            # self.env_state_enc_layers = nn.Sequential(
-            #     nn.Linear(
-            #         config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
-            #     ),
-            #     nn.ELU(),
-            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-            #     nn.LayerNorm(config.latent_dim),
-            #     nn.Sigmoid(),
-            # )
-            self.env_state_enc_layers = mlp(
-                config.input_shapes["observation.environment_state"][0],
-                [config.state_encoder_hidden_dim],
-                config.latent_dim,
-                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            self.env_state_enc_layers = nn.Sequential(
+                nn.Linear(
+                    config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
+                ),
+                nn.ELU(),
+                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+                nn.LayerNorm(config.latent_dim),
+                nn.Sigmoid(),
             )
+            # self.env_state_enc_layers = mlp(
+            #     config.input_shapes["observation.environment_state"][0],
+            #     [config.state_encoder_hidden_dim],
+            #     config.latent_dim,
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            # )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
         """Encode the image and/or state vector.
