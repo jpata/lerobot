@@ -21,6 +21,7 @@ from copy import deepcopy
 from pathlib import Path
 from pprint import pformat
 from threading import Lock
+import pickle
 
 import hydra
 import numpy as np
@@ -204,6 +205,7 @@ def log_train_info(logger: Logger, info, step, cfg, dataset, is_online):
     info["num_episodes"] = num_episodes
     info["num_epochs"] = num_epochs
     info["is_online"] = is_online
+    info.pop("advantage")
 
     logger.log_dict(info, step, mode="train")
 
@@ -379,7 +381,6 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                     max_episodes_rendered=4,
                     start_seed=cfg.seed,
                 )
-                import pdb;pdb.set_trace()
             log_eval_info(logger, eval_info["aggregated"], step, cfg, offline_dataset, is_online=is_online)
             if cfg.wandb.enable:
                 logger.log_video(eval_info["video_paths"][0], step, mode="eval")
@@ -566,7 +567,8 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                         rollout_start_seed := (rollout_start_seed + cfg.training.batch_size) % 1000000
                     ),
                 )
-                import pdb;pdb.set_trace()
+                with open(logger.log_dir/"episode_{}.pkl".format(rollout_start_seed), "wb") as fi:
+                    pickle.dump(eval_info, fi)
             online_rollout_s = time.perf_counter() - start_rollout_time
 
             with lock:
@@ -592,15 +594,15 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
             return online_rollout_s, update_online_buffer_s
 
-        online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
-        # future = executor.submit(sample_trajectory_and_update_buffer)
+        # online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
         # If we aren't doing async rollouts, or if we haven't yet gotten enough examples in our buffer, wait
         # here until the rollout and buffer update is done, before proceeding to the policy update steps.
-        # if (
-        #     not cfg.training.do_online_rollout_async
-        #     or len(online_dataset) <= cfg.training.online_buffer_seed_size
-        # ):
-        #     online_rollout_s, update_online_buffer_s = future.result()
+        future = executor.submit(sample_trajectory_and_update_buffer)
+        if (
+            not cfg.training.do_online_rollout_async
+            or len(online_dataset) <= cfg.training.online_buffer_seed_size
+        ):
+            online_rollout_s, update_online_buffer_s = future.result()
 
         if len(online_dataset) <= cfg.training.online_buffer_seed_size:
             logging.info(
@@ -618,7 +620,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
             for key in batch:
                 if batch[key].dtype == torch.float64:
                     batch[key] = batch[key].to(torch.float32)
-                batch[key] = batch[key].to(cfg.device, non_blocking=False)
+                batch[key] = batch[key].to(cfg.device, non_blocking=True)
 
             train_info = update_policy(
                 policy,
@@ -650,10 +652,10 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
         # If we're doing async rollouts, we should now wait until we've completed them before proceeding
         # to do the next batch of rollouts.
-        # if future.running():
-        #     start = time.perf_counter()
-        #     online_rollout_s, update_online_buffer_s = future.result()
-        #     await_update_online_buffer_s = time.perf_counter() - start
+        if future.running():
+            start = time.perf_counter()
+            online_rollout_s, update_online_buffer_s = future.result()
+            await_update_online_buffer_s = time.perf_counter() - start
 
         if online_step >= cfg.training.online_steps:
             break

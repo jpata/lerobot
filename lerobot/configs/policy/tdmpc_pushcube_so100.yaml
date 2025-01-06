@@ -11,7 +11,7 @@ training:
 
   batch_size: 256
   grad_clip_norm: 10.0
-  lr: 1e-4
+  lr: 1e-3
 
   eval_freq: 10000
   log_freq: 1
@@ -68,11 +68,11 @@ policy:
   # Inference.
   use_mpc: true
   cem_iterations: 6
-  max_std: 2.0
-  min_std: 0.05
+  max_std: 0.5
+  min_std: 0.00001
   n_gaussian_samples: 512
   n_pi_samples: 51
-  uncertainty_regularizer_coeff: 0.5
+  uncertainty_regularizer_coeff: 1.0
   n_elites: 50
   elite_weighting_temperature: 0.5
   gaussian_mean_momentum: 0.1
