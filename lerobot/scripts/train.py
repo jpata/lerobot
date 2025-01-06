@@ -379,6 +379,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                     max_episodes_rendered=4,
                     start_seed=cfg.seed,
                 )
+                import pdb;pdb.set_trace()
             log_eval_info(logger, eval_info["aggregated"], step, cfg, offline_dataset, is_online=is_online)
             if cfg.wandb.enable:
                 logger.log_video(eval_info["video_paths"][0], step, mode="eval")
@@ -565,6 +566,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                         rollout_start_seed := (rollout_start_seed + cfg.training.batch_size) % 1000000
                     ),
                 )
+                import pdb;pdb.set_trace()
             online_rollout_s = time.perf_counter() - start_rollout_time
 
             with lock:

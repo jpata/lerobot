@@ -137,7 +137,7 @@ def rollout(
     # Keep track of which environments are done.
     done = np.array([False] * env.num_envs)
     # max_steps = env.call("_max_episode_steps")[0]
-    max_steps = 2000
+    max_steps = 10
     progbar = trange(
         max_steps,
         desc=f"Running rollout with at most {max_steps} steps",

@@ -15,7 +15,7 @@ env:
   state_dim: 6 #6(pos)
   action_dim: 6 #6(new pos)
   fps: ${fps}
-  episode_length: 300
+  episode_length: 10
   gym:
     observation_mode: state
     render_mode: human

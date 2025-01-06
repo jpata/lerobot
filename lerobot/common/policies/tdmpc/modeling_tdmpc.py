@@ -618,7 +618,7 @@ class TDMPCTOLD(nn.Module):
         #     config.latent_dim + config.output_shapes["action"][0],
         #     [config.mlp_dim, config.mlp_dim],
         #     config.latent_dim,
-        #     act=nn.Sigmoid()
+        #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
         # )
 
         self._reward = nn.Sequential(
@@ -649,6 +649,7 @@ class TDMPCTOLD(nn.Module):
         #     config.latent_dim,
         #     [config.mlp_dim, config.mlp_dim],
         #     config.output_shapes["action"][0],
+        #     act=SimNorm(SimpleNamespace(simnorm_dim=config.output_shapes["action"][0])),
         # )
 
         self._Qs = nn.ModuleList(
@@ -656,7 +657,7 @@ class TDMPCTOLD(nn.Module):
                 nn.Sequential(
                     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
                     nn.LayerNorm(config.mlp_dim),
-                    nn.Mish(),
+                    nn.Tanh(),
                     nn.Linear(config.mlp_dim, config.mlp_dim),
                     nn.ELU(),
                     nn.Linear(config.mlp_dim, 1),
@@ -672,7 +673,7 @@ class TDMPCTOLD(nn.Module):
         self._V = nn.Sequential(
             nn.Linear(config.latent_dim, config.mlp_dim),
             nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
+            nn.Tanh(),
             nn.Linear(config.mlp_dim, config.mlp_dim),
             nn.ELU(),
             nn.Linear(config.mlp_dim, 1),
@@ -767,7 +768,9 @@ class TDMPCTOLD(nn.Module):
         Returns:
             (*,) tensor of estimated state values.
         """
-        return self._V(z).squeeze(-1)
+        ret = self._V(z).squeeze(-1)
+        # print("V", ret)
+        return ret
 
     def Qs(self, z: Tensor, a: Tensor, return_min: bool = False) -> Tensor:  # noqa: N802
         """Predict state-action value for all of the learned Q functions.
@@ -783,14 +786,15 @@ class TDMPCTOLD(nn.Module):
         """
         x = torch.cat([z, a], dim=-1)
         if not return_min:
-            return torch.stack([q(x).squeeze(-1) for q in self._Qs], dim=0)
+            ret = torch.stack([q(x).squeeze(-1) for q in self._Qs], dim=0)
         else:
             if len(self._Qs) > 2:  # noqa: SIM108
                 Qs = [self._Qs[i] for i in np.random.choice(len(self._Qs), size=2)]
             else:
                 Qs = self._Qs
-            return torch.stack([q(x).squeeze(-1) for q in Qs], dim=0).min(dim=0)[0]
-
+            ret = torch.stack([q(x).squeeze(-1) for q in Qs], dim=0).min(dim=0)[0]
+        # print("Q", ret)
+        return ret
 
 class TDMPCObservationEncoder(nn.Module):
     """Encode image and/or state vector observations."""
@@ -840,7 +844,7 @@ class TDMPCObservationEncoder(nn.Module):
             #     config.input_shapes["observation.state"][0],
             #     [config.state_encoder_hidden_dim],
             #     config.latent_dim,
-            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
             # )
         if "observation.environment_state" in config.input_shapes:
             self.env_state_enc_layers = nn.Sequential(
@@ -856,7 +860,7 @@ class TDMPCObservationEncoder(nn.Module):
             #     config.input_shapes["observation.environment_state"][0],
             #     [config.state_encoder_hidden_dim],
             #     config.latent_dim,
-            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim))
+            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
             # )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
