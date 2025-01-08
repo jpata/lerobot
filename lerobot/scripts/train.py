@@ -21,6 +21,7 @@ from copy import deepcopy
 from pathlib import Path
 from pprint import pformat
 from threading import Lock
+import pickle
 
 import hydra
 import numpy as np
@@ -50,6 +51,14 @@ from lerobot.common.utils.utils import (
 )
 from lerobot.scripts.eval import eval_policy
 
+def my_collate_fn(batches):
+    batches_dropped = []
+    for b in batches:
+        for key_to_drop in ["seed", "next.done", "task_index"]:
+            if key_to_drop in b:
+                del b[key_to_drop]
+        batches_dropped.append(b)  
+    return torch.utils.data.dataloader.default_collate(batches_dropped)
 
 def make_optimizer_and_scheduler(cfg, policy):
     if cfg.policy.name == "act":
@@ -196,6 +205,7 @@ def log_train_info(logger: Logger, info, step, cfg, dataset, is_online):
     info["num_episodes"] = num_episodes
     info["num_epochs"] = num_epochs
     info["is_online"] = is_online
+    info.pop("advantage")
 
     logger.log_dict(info, step, mode="train")
 
@@ -425,7 +435,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         dataloading_s = time.perf_counter() - start_time
 
         for key in batch:
-            batch[key] = batch[key].to(device, non_blocking=True)
+            batch[key] = batch[key].to(device, non_blocking=False)
 
         train_info = update_policy(
             policy,
@@ -476,7 +486,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
             **{k: {"shape": v, "dtype": np.dtype("float32")} for k, v in policy.config.input_shapes.items()},
             **{k: {"shape": v, "dtype": np.dtype("float32")} for k, v in policy.config.output_shapes.items()},
             "next.reward": {"shape": (), "dtype": np.dtype("float32")},
-            "next.done": {"shape": (), "dtype": np.dtype("?")},
+            # "next.done": {"shape": (), "dtype": np.dtype("?")},
             "next.success": {"shape": (), "dtype": np.dtype("?")},
         },
         buffer_capacity=cfg.training.online_buffer_capacity,
@@ -490,6 +500,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
     # Create dataloader for online training.
     concat_dataset = torch.utils.data.ConcatDataset([offline_dataset, online_dataset])
+
     sampler_weights = compute_sampler_weights(
         offline_dataset,
         offline_drop_n_last_frames=cfg.training.get("drop_n_last_frames", 0),
@@ -504,6 +515,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         num_samples=len(concat_dataset),
         replacement=True,
     )
+        
     dataloader = torch.utils.data.DataLoader(
         concat_dataset,
         batch_size=cfg.training.batch_size,
@@ -511,6 +523,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=True,
+        collate_fn=my_collate_fn
     )
     dl_iter = cycle(dataloader)
 
@@ -548,12 +561,14 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                     online_rollout_policy,
                     n_episodes=cfg.training.online_rollout_n_episodes,
                     max_episodes_rendered=min(10, cfg.training.online_rollout_n_episodes),
-                    videos_dir=logger.log_dir / "online_rollout_videos",
+                    videos_dir=logger.log_dir / "online_rollout_videos" / str(online_step),
                     return_episode_data=True,
                     start_seed=(
                         rollout_start_seed := (rollout_start_seed + cfg.training.batch_size) % 1000000
                     ),
                 )
+                with open(logger.log_dir/"episode_{}.pkl".format(rollout_start_seed), "wb") as fi:
+                    pickle.dump(eval_info, fi)
             online_rollout_s = time.perf_counter() - start_rollout_time
 
             with lock:
@@ -579,20 +594,21 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
             return online_rollout_s, update_online_buffer_s
 
-        future = executor.submit(sample_trajectory_and_update_buffer)
+        online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
         # If we aren't doing async rollouts, or if we haven't yet gotten enough examples in our buffer, wait
         # here until the rollout and buffer update is done, before proceeding to the policy update steps.
-        if (
-            not cfg.training.do_online_rollout_async
-            or len(online_dataset) <= cfg.training.online_buffer_seed_size
-        ):
-            online_rollout_s, update_online_buffer_s = future.result()
+        # future = executor.submit(sample_trajectory_and_update_buffer)
+        # if (
+        #     not cfg.training.do_online_rollout_async
+        #     or len(online_dataset) <= cfg.training.online_buffer_seed_size
+        # ):
+        #     online_rollout_s, update_online_buffer_s = future.result()
 
-        if len(online_dataset) <= cfg.training.online_buffer_seed_size:
-            logging.info(
-                f"Seeding online buffer: {len(online_dataset)}/{cfg.training.online_buffer_seed_size}"
-            )
-            continue
+        # if len(online_dataset) <= cfg.training.online_buffer_seed_size:
+        #     logging.info(
+        #         f"Seeding online buffer: {len(online_dataset)}/{cfg.training.online_buffer_seed_size}"
+        #     )
+        #     continue
 
         policy.train()
         for _ in range(cfg.training.online_steps_between_rollouts):
@@ -602,6 +618,8 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                 dataloading_s = time.perf_counter() - start_time
 
             for key in batch:
+                if batch[key].dtype == torch.float64:
+                    batch[key] = batch[key].to(torch.float32)
                 batch[key] = batch[key].to(cfg.device, non_blocking=True)
 
             train_info = update_policy(
@@ -634,10 +652,10 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
         # If we're doing async rollouts, we should now wait until we've completed them before proceeding
         # to do the next batch of rollouts.
-        if future.running():
-            start = time.perf_counter()
-            online_rollout_s, update_online_buffer_s = future.result()
-            await_update_online_buffer_s = time.perf_counter() - start
+        # if future.running():
+        #     start = time.perf_counter()
+        #     online_rollout_s, update_online_buffer_s = future.result()
+        #     await_update_online_buffer_s = time.perf_counter() - start
 
         if online_step >= cfg.training.online_steps:
             break

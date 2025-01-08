@@ -489,7 +489,7 @@ class ManipulatorRobot:
             # Mode=0 for Position Control
             self.follower_arms[name].write("Mode", 0)
             # Set P_Coefficient to lower value to avoid shakiness (Default is 32)
-            self.follower_arms[name].write("P_Coefficient", 16)
+            self.follower_arms[name].write("P_Coefficient", 4)
             # Set I_Coefficient and D_Coefficient to default value 0 and 32
             self.follower_arms[name].write("I_Coefficient", 0)
             self.follower_arms[name].write("D_Coefficient", 32)
@@ -533,7 +533,7 @@ class ManipulatorRobot:
             # Used when record_data=True
             follower_goal_pos[name] = goal_pos
 
-            goal_pos = goal_pos.numpy().astype(np.int32)
+            goal_pos = np.round(goal_pos.numpy(), 0).astype(np.int32)
             self.follower_arms[name].write("Goal_Position", goal_pos)
             self.logs[f"write_follower_{name}_goal_pos_dt_s"] = time.perf_counter() - before_fwrite_t
 
@@ -655,7 +655,7 @@ class ManipulatorRobot:
             action_sent.append(goal_pos)
 
             # Send goal position to each follower
-            goal_pos = goal_pos.numpy().astype(np.int32)
+            goal_pos = np.round(goal_pos.numpy(), 0).astype(np.int32)
             self.follower_arms[name].write("Goal_Position", goal_pos)
 
         return torch.cat(action_sent)

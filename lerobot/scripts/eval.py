@@ -166,7 +166,7 @@ def rollout(
         # VectorEnv stores is_success in `info["final_info"][env_index]["is_success"]`. "final_info" isn't
         # available of none of the envs finished.
         if "final_info" in info:
-            successes = [info["is_success"] if info is not None else False for info in info["final_info"]]
+            successes = [(_info["is_success"] if ((_info is not None) and ("is_success" in _info)) else False) for _info in info["final_info"]]
         else:
             successes = [False] * env.num_envs
 
@@ -419,7 +419,7 @@ def _compile_episode_data(
             "episode_index": torch.tensor([start_episode_index + ep_ix] * (num_frames - 1)),
             "frame_index": torch.arange(0, num_frames - 1, 1),
             "timestamp": torch.arange(0, num_frames - 1, 1) / fps,
-            "next.done": rollout_data["done"][ep_ix, : num_frames - 1],
+            # "next.done": rollout_data["done"][ep_ix, : num_frames - 1],
             "next.success": rollout_data["success"][ep_ix, : num_frames - 1],
             "next.reward": rollout_data["reward"][ep_ix, : num_frames - 1].type(torch.float32),
         }
