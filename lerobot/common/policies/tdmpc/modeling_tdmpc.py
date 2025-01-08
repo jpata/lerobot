@@ -833,35 +833,35 @@ class TDMPCObservationEncoder(nn.Module):
                 )
             )
         if "observation.state" in config.input_shapes:
-            self.state_enc_layers = nn.Sequential(
-                nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
-                nn.ELU(),
-                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-                nn.LayerNorm(config.latent_dim),
-                nn.Sigmoid(),
-            )
-            # self.state_enc_layers = mlp(
-            #     config.input_shapes["observation.state"][0],
-            #     [config.state_encoder_hidden_dim],
-            #     config.latent_dim,
-            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+            # self.state_enc_layers = nn.Sequential(
+            #     nn.Linear(config.input_shapes["observation.state"][0], config.state_encoder_hidden_dim),
+            #     nn.ELU(),
+            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+            #     nn.LayerNorm(config.latent_dim),
+            #     nn.Sigmoid(),
             # )
+            self.state_enc_layers = mlp(
+                config.input_shapes["observation.state"][0],
+                [config.state_encoder_hidden_dim],
+                config.latent_dim,
+                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+            )
         if "observation.environment_state" in config.input_shapes:
-            self.env_state_enc_layers = nn.Sequential(
-                nn.Linear(
-                    config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
-                ),
-                nn.ELU(),
-                nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
-                nn.LayerNorm(config.latent_dim),
-                nn.Sigmoid(),
-            )
-            # self.env_state_enc_layers = mlp(
-            #     config.input_shapes["observation.environment_state"][0],
-            #     [config.state_encoder_hidden_dim],
-            #     config.latent_dim,
-            #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+            # self.env_state_enc_layers = nn.Sequential(
+            #     nn.Linear(
+            #         config.input_shapes["observation.environment_state"][0], config.state_encoder_hidden_dim
+            #     ),
+            #     nn.ELU(),
+            #     nn.Linear(config.state_encoder_hidden_dim, config.latent_dim),
+            #     nn.LayerNorm(config.latent_dim),
+            #     nn.Sigmoid(),
             # )
+            self.env_state_enc_layers = mlp(
+                config.input_shapes["observation.environment_state"][0],
+                [config.state_encoder_hidden_dim],
+                config.latent_dim,
+                act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+            )
 
     def forward(self, obs_dict: dict[str, Tensor]) -> Tensor:
         """Encode the image and/or state vector.

@@ -9,7 +9,7 @@ training:
   # Offline training dataloader
   num_workers: 1
 
-  batch_size: 256
+  batch_size: 2048
   grad_clip_norm: 10.0
   lr: 1e-3
 

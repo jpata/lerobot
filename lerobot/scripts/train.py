@@ -421,6 +421,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=False,
+        multiprocessing_context="fork"
     )
     dl_iter = cycle(dataloader)
 
@@ -523,8 +524,12 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=True,
-        collate_fn=my_collate_fn
+        collate_fn=my_collate_fn,
+        #needed to for dataloader not to block when using spawn for the async envs
+        multiprocessing_context="fork",
+        prefetch_factor=10
     )
+
     dl_iter = cycle(dataloader)
 
     # Lock and thread pool executor for asynchronous online rollouts. When asynchronous mode is disabled,
@@ -551,6 +556,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
         def sample_trajectory_and_update_buffer():
             nonlocal rollout_start_seed
+            print("rollout")
             with lock:
                 online_rollout_policy.load_state_dict(policy.state_dict())
             online_rollout_policy.eval()
@@ -594,21 +600,21 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
             return online_rollout_s, update_online_buffer_s
 
-        online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
+        # online_rollout_s, update_online_buffer_s = sample_trajectory_and_update_buffer()
         # If we aren't doing async rollouts, or if we haven't yet gotten enough examples in our buffer, wait
         # here until the rollout and buffer update is done, before proceeding to the policy update steps.
-        # future = executor.submit(sample_trajectory_and_update_buffer)
-        # if (
-        #     not cfg.training.do_online_rollout_async
-        #     or len(online_dataset) <= cfg.training.online_buffer_seed_size
-        # ):
-        #     online_rollout_s, update_online_buffer_s = future.result()
+        future = executor.submit(sample_trajectory_and_update_buffer)
+        if (
+            not cfg.training.do_online_rollout_async
+            or len(online_dataset) <= cfg.training.online_buffer_seed_size
+        ):
+            online_rollout_s, update_online_buffer_s = future.result()
 
-        # if len(online_dataset) <= cfg.training.online_buffer_seed_size:
-        #     logging.info(
-        #         f"Seeding online buffer: {len(online_dataset)}/{cfg.training.online_buffer_seed_size}"
-        #     )
-        #     continue
+        if len(online_dataset) <= cfg.training.online_buffer_seed_size:
+            logging.info(
+                f"Seeding online buffer: {len(online_dataset)}/{cfg.training.online_buffer_seed_size}"
+            )
+            continue
 
         policy.train()
         for _ in range(cfg.training.online_steps_between_rollouts):
@@ -652,10 +658,11 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
 
         # If we're doing async rollouts, we should now wait until we've completed them before proceeding
         # to do the next batch of rollouts.
-        # if future.running():
-        #     start = time.perf_counter()
-        #     online_rollout_s, update_online_buffer_s = future.result()
-        #     await_update_online_buffer_s = time.perf_counter() - start
+        if future.running():
+            print('waiting on rollout')
+            start = time.perf_counter()
+            online_rollout_s, update_online_buffer_s = future.result()
+            await_update_online_buffer_s = time.perf_counter() - start
 
         if online_step >= cfg.training.online_steps:
             break
@@ -684,4 +691,6 @@ def train_notebook(out_dir=None, job_name=None, config_name="default", config_pa
 
 
 if __name__ == "__main__":
+    #needed to run async envs properly in parallel
+    torch.multiprocessing.set_start_method("spawn")
     train_cli()
