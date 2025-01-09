@@ -9,9 +9,9 @@ training:
   # Offline training dataloader
   num_workers: 1
 
-  batch_size: 2048
+  batch_size: 4096
   grad_clip_norm: 10.0
-  lr: 1e-3
+  lr: 5e-4
 
   eval_freq: 10000
   log_freq: 1
@@ -33,6 +33,13 @@ training:
     action: "[i / ${fps} for i in range(${policy.horizon})]"
     next.reward: "[i / ${fps} for i in range(${policy.horizon})]"
 
+  delta_timestamp: "[i / ${fps} for i in range(${policy.horizon} + 1)]"
+  keys_to_get:
+    - observation.environment_state
+    - observation.state
+    - action
+    - next.reward
+
 policy:
   name: tdmpc
 
@@ -40,8 +47,8 @@ policy:
 
   # Input / output structure.
   n_action_repeats: 1
-  horizon: 16
-  n_action_steps: 16
+  horizon: 32
+  n_action_steps: 32
 
   input_shapes:
     observation.environment_state: [6]

@@ -481,6 +481,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
             "was made. This is because the online buffer is updated on disk during training, independently "
             "of our explicit checkpointing mechanisms."
         )
+
     online_dataset = OnlineBuffer(
         online_buffer_path,
         data_spec={
@@ -493,6 +494,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         buffer_capacity=cfg.training.online_buffer_capacity,
         fps=online_env.unwrapped.metadata["render_fps"],
         delta_timestamps=cfg.training.delta_timestamps,
+        keys_to_get=cfg.training.keys_to_get,
     )
 
     # If we are doing online rollouts asynchronously, deepcopy the policy to use for online rollouts (this
