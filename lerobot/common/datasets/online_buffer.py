@@ -103,6 +103,7 @@ class OnlineBuffer(torch.utils.data.Dataset):
         self.set_delta_timestamps(delta_timestamps)
         self._fps = fps
         self._horizon = horizon
+        self._keys_to_get = keys_to_get
         # Tolerance in seconds used to discard loaded frames when their timestamps are not close enough from
         # the requested frames. It is only used when `delta_timestamps` is provided.
         # minus 1e-4 to account for possible numerical error
