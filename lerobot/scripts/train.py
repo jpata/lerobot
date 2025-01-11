@@ -378,7 +378,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
                     policy,
                     cfg.eval.n_episodes,
                     videos_dir=Path(out_dir) / "eval" / f"videos_step_{step_identifier}",
-                    max_episodes_rendered=4,
+                    max_episodes_rendered=10,
                     start_seed=cfg.seed,
                 )
             log_eval_info(logger, eval_info["aggregated"], step, cfg, offline_dataset, is_online=is_online)
