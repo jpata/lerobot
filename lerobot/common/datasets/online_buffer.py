@@ -113,11 +113,11 @@ class OnlineBuffer(torch.utils.data.Dataset):
         Path(write_dir).mkdir(parents=True, exist_ok=True)
         self._data = {}
         for k, v in data_spec.items():
-            self._data[k] = np.zeros(
-                tuple(v["shape"]) if v is not None else None,
-                # filename=Path(write_dir) / k,
+            self._data[k] = _make_memmap_safe(
+                shape=tuple(v["shape"]) if v is not None else None,
+                filename=Path(write_dir) / k,
                 dtype=v["dtype"] if v is not None else None,
-                # mode="r+" if (Path(write_dir) / k).exists() else "w+",
+                mode="r+" if (Path(write_dir) / k).exists() else "w+",
             )
 
     @property
@@ -262,15 +262,27 @@ class OnlineBuffer(torch.utils.data.Dataset):
             #retrieve the contiguous index
             item[data_key] = self._data[data_key][idx:idx+self._horizon+1]
             item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"] = is_pad
+            pad_to_horizon(item, data_key, self._horizon+1)
             #action and reward come with horizon
             if data_key in ["action", "next.reward"]:
                 item[data_key] = item[data_key][:-1]
                 item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"] = item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"][:-1]
+                pad_to_horizon(item, data_key, self._horizon)
         return self._item_to_tensors(item)
 
     def get_data_by_key(self, key: str) -> torch.Tensor:
         """Returns all data for a given data key as a Tensor."""
         return torch.from_numpy(self._data[key][self._data[OnlineBuffer.OCCUPANCY_MASK_KEY]])
+
+def pad_to_horizon(item, data_key, horizon):
+    if item[data_key].shape[0] != horizon:
+        pad = horizon - item[data_key].shape[0]
+        pad_shapes = tuple([(0, pad)] + (len(item[data_key].shape)-1)*[(0,0)])
+        item[data_key] = np.pad(item[data_key], pad_shapes)
+        pad_key = f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"
+        pad_shapes = tuple([(0, pad)] + (len(item[pad_key].shape)-1)*[(0,0)])
+        item[pad_key] = np.pad(item[pad_key], pad_shapes, constant_values=True)
+        assert(item[data_key].shape[0] == horizon)
 
 
 def compute_sampler_weights(

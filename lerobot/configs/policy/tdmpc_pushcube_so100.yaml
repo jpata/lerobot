@@ -11,7 +11,7 @@ training:
 
   batch_size: 4096
   grad_clip_norm: 10.0
-  lr: 5e-4
+  lr: 1e-3
 
   eval_freq: 10000
   log_freq: 1
@@ -27,12 +27,14 @@ training:
   online_buffer_seed_size: 0
   do_online_rollout_async: false
 
+  #this is not used right now
   delta_timestamps:
     observation.environment_state: "[i / ${fps} for i in range(${policy.horizon} + 1)]"
     observation.state: "[i / ${fps} for i in range(${policy.horizon} + 1)]"
     action: "[i / ${fps} for i in range(${policy.horizon})]"
     next.reward: "[i / ${fps} for i in range(${policy.horizon})]"
 
+  #we use this instead
   delta_timestamp: "[i / ${fps} for i in range(${policy.horizon} + 1)]"
   keys_to_get:
     - observation.environment_state

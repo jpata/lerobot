@@ -603,38 +603,38 @@ class TDMPCTOLD(nn.Module):
         super().__init__()
         self.config = config
         self._encoder = TDMPCObservationEncoder(config)
-        self._dynamics = nn.Sequential(
-            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.latent_dim),
-            nn.LayerNorm(config.latent_dim),
-            nn.Sigmoid(),
-        )
-        # self._dynamics = mlp(
-        #     config.latent_dim + config.output_shapes["action"][0],
-        #     [config.mlp_dim, config.mlp_dim],
-        #     config.latent_dim,
-        #     act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+        # self._dynamics = nn.Sequential(
+        #     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+        #     nn.LayerNorm(config.mlp_dim),
+        #     nn.Mish(),
+        #     nn.Linear(config.mlp_dim, config.mlp_dim),
+        #     nn.LayerNorm(config.mlp_dim),
+        #     nn.Mish(),
+        #     nn.Linear(config.mlp_dim, config.latent_dim),
+        #     nn.LayerNorm(config.latent_dim),
+        #     nn.Sigmoid(),
         # )
+        self._dynamics = mlp(
+            config.latent_dim + config.output_shapes["action"][0],
+            [config.mlp_dim, config.mlp_dim],
+            config.latent_dim,
+            act=SimNorm(SimpleNamespace(simnorm_dim=config.latent_dim)),
+        )
 
-        self._reward = nn.Sequential(
-            nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, 1),
-        )
-        # self._reward = mlp(
-        #     config.latent_dim + config.output_shapes["action"][0],
-        #     [config.mlp_dim, config.mlp_dim],
-        #     1,
+        # self._reward = nn.Sequential(
+        #     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+        #     nn.LayerNorm(config.mlp_dim),
+        #     nn.Mish(),
+        #     nn.Linear(config.mlp_dim, config.mlp_dim),
+        #     nn.LayerNorm(config.mlp_dim),
+        #     nn.Mish(),
+        #     nn.Linear(config.mlp_dim, 1),
         # )
+        self._reward = mlp(
+            config.latent_dim + config.output_shapes["action"][0],
+            [config.mlp_dim, config.mlp_dim],
+            1,
+        )
 
         self._pi = nn.Sequential(
             nn.Linear(config.latent_dim, config.mlp_dim),
@@ -654,35 +654,35 @@ class TDMPCTOLD(nn.Module):
 
         self._Qs = nn.ModuleList(
             [
-                nn.Sequential(
-                    nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
-                    nn.LayerNorm(config.mlp_dim),
-                    nn.Mish(),
-                    nn.Linear(config.mlp_dim, config.mlp_dim),
-                    nn.ELU(),
-                    nn.Linear(config.mlp_dim, 1),
+                # nn.Sequential(
+                #     nn.Linear(config.latent_dim + config.output_shapes["action"][0], config.mlp_dim),
+                #     nn.LayerNorm(config.mlp_dim),
+                #     nn.Mish(),
+                #     nn.Linear(config.mlp_dim, config.mlp_dim),
+                #     nn.ELU(),
+                #     nn.Linear(config.mlp_dim, 1),
+                # )
+                mlp(
+                    config.latent_dim + config.output_shapes["action"][0],
+                    [config.mlp_dim, config.mlp_dim],
+                    1,
                 )
-                # mlp(
-                #     config.latent_dim + config.output_shapes["action"][0],
-                #     [config.mlp_dim, config.mlp_dim],
-                #     1,
-                # )      
                 for _ in range(config.q_ensemble_size)
             ]
         )
-        self._V = nn.Sequential(
-            nn.Linear(config.latent_dim, config.mlp_dim),
-            nn.LayerNorm(config.mlp_dim),
-            nn.Mish(),
-            nn.Linear(config.mlp_dim, config.mlp_dim),
-            nn.ELU(),
-            nn.Linear(config.mlp_dim, 1),
-        )
-        # self._V = mlp(
-        #     config.latent_dim,
-        #     [config.mlp_dim, config.mlp_dim],
-        #     1,
-        # )      
+        # self._V = nn.Sequential(
+        #     nn.Linear(config.latent_dim, config.mlp_dim),
+        #     nn.LayerNorm(config.mlp_dim),
+        #     nn.Mish(),
+        #     nn.Linear(config.mlp_dim, config.mlp_dim),
+        #     nn.ELU(),
+        #     nn.Linear(config.mlp_dim, 1),
+        # )
+        self._V = mlp(
+            config.latent_dim,
+            [config.mlp_dim, config.mlp_dim],
+            1,
+        )      
         self._init_weights()
 
     def _init_weights(self):

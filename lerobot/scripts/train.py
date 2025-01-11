@@ -57,7 +57,7 @@ def my_collate_fn(batches):
         for key_to_drop in ["seed", "next.done", "task_index"]:
             if key_to_drop in b:
                 del b[key_to_drop]
-        batches_dropped.append(b)  
+        batches_dropped.append(b)
     return torch.utils.data.dataloader.default_collate(batches_dropped)
 
 def make_optimizer_and_scheduler(cfg, policy):
@@ -436,7 +436,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         dataloading_s = time.perf_counter() - start_time
 
         for key in batch:
-            batch[key] = batch[key].to(device, non_blocking=False)
+            batch[key] = batch[key].to(device, non_blocking=True)
 
         train_info = update_policy(
             policy,
@@ -495,6 +495,7 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         fps=online_env.unwrapped.metadata["render_fps"],
         delta_timestamps=cfg.training.delta_timestamps,
         keys_to_get=cfg.training.keys_to_get,
+        horizon=cfg.policy.horizon
     )
 
     # If we are doing online rollouts asynchronously, deepcopy the policy to use for online rollouts (this
@@ -523,13 +524,13 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
         concat_dataset,
         batch_size=cfg.training.batch_size,
         num_workers=cfg.training.num_workers,
+        # num_workers=0,
         sampler=sampler,
         pin_memory=device.type != "cpu",
         drop_last=True,
         collate_fn=my_collate_fn,
         #needed to for dataloader not to block when using spawn for the async envs
         multiprocessing_context="fork",
-        prefetch_factor=10
     )
 
     dl_iter = cycle(dataloader)
