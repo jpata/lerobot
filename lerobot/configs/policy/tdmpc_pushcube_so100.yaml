@@ -1,7 +1,7 @@
 # @package _global_
 
 seed: 19123
-dataset_repo_id: jpata/so100_pushcube_sim
+dataset_repo_id: jpata/so100_pushcube_sim_cur0
 
 training:
   offline_steps: 0

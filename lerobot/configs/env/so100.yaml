@@ -19,3 +19,4 @@ env:
   gym:
     observation_mode: state
     render_mode: human
+    curriculum_level: 0
