@@ -9,9 +9,9 @@ training:
   # Offline training dataloader
   num_workers: 1
 
-  batch_size: 4096
+  batch_size: 128
   grad_clip_norm: 10.0
-  lr: 1e-3
+  lr: 1e-4
 
   eval_freq: 10000
   log_freq: 1
