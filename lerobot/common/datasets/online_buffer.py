@@ -77,6 +77,8 @@ class OnlineBuffer(torch.utils.data.Dataset):
         buffer_capacity: int | None,
         fps: float | None = None,
         delta_timestamps: dict[str, list[float]] | dict[str, np.ndarray] | None = None,
+        keys_to_get: list[str] | None = None,
+        horizon: int = 1
     ):
         """
         The online buffer can be provided from scratch or you can load an existing online buffer by passing
@@ -100,6 +102,8 @@ class OnlineBuffer(torch.utils.data.Dataset):
         """
         self.set_delta_timestamps(delta_timestamps)
         self._fps = fps
+        self._horizon = horizon
+        self._keys_to_get = keys_to_get
         # Tolerance in seconds used to discard loaded frames when their timestamps are not close enough from
         # the requested frames. It is only used when `delta_timestamps` is provided.
         # minus 1e-4 to account for possible numerical error
@@ -110,10 +114,10 @@ class OnlineBuffer(torch.utils.data.Dataset):
         self._data = {}
         for k, v in data_spec.items():
             self._data[k] = _make_memmap_safe(
+                shape=tuple(v["shape"]) if v is not None else None,
                 filename=Path(write_dir) / k,
                 dtype=v["dtype"] if v is not None else None,
                 mode="r+" if (Path(write_dir) / k).exists() else "w+",
-                shape=tuple(v["shape"]) if v is not None else None,
             )
 
     @property
@@ -250,50 +254,35 @@ class OnlineBuffer(torch.utils.data.Dataset):
 
         item = {k: v[idx] for k, v in self._data.items() if not k.startswith("_")}
 
-        if self.delta_timestamps is None:
-            return self._item_to_tensors(item)
-
-        episode_index = item[OnlineBuffer.EPISODE_INDEX_KEY]
-        current_ts = item[OnlineBuffer.TIMESTAMP_KEY]
-        episode_data_indices = np.where(
-            np.bitwise_and(
-                self._data[OnlineBuffer.EPISODE_INDEX_KEY] == episode_index,
-                self._data[OnlineBuffer.OCCUPANCY_MASK_KEY],
-            )
-        )[0]
-        episode_timestamps = self._data[OnlineBuffer.TIMESTAMP_KEY][episode_data_indices]
-
-        for data_key in self.delta_timestamps:
-            # Note: The logic in this loop is copied from `load_previous_and_future_frames`.
-            # Get timestamps used as query to retrieve data of previous/future frames.
-            query_ts = current_ts + self.delta_timestamps[data_key]
-
-            # Compute distances between each query timestamp and all timestamps of all the frames belonging to
-            # the episode.
-            dist = np.abs(query_ts[:, None] - episode_timestamps[None, :])
-            argmin_ = np.argmin(dist, axis=1)
-            min_ = dist[np.arange(dist.shape[0]), argmin_]
-
-            is_pad = min_ > self.tolerance_s
-
-            # Check violated query timestamps are all outside the episode range.
-            assert (
-                (query_ts[is_pad] < episode_timestamps[0]) | (episode_timestamps[-1] < query_ts[is_pad])
-            ).all(), (
-                f"One or several timestamps unexpectedly violate the tolerance ({min_} > {self.tolerance_s=}"
-                ") inside the episode range."
-            )
-
-            # Load frames for this data key.
-            item[data_key] = self._data[data_key][episode_data_indices[argmin_]]
-
+        #observations come with horizon+1
+        ep_idx = self._data[OnlineBuffer.EPISODE_INDEX_KEY][idx:idx+self._horizon+1]
+        #if the episode index changes from the initial one, we want to pad the subsequent steps
+        is_pad = ep_idx!=ep_idx[0]
+        for data_key in self._keys_to_get:
+            #retrieve the contiguous index
+            item[data_key] = self._data[data_key][idx:idx+self._horizon+1]
             item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"] = is_pad
-
+            pad_to_horizon(item, data_key, self._horizon+1)
+            #action and reward come with horizon
+            if data_key in ["action", "next.reward"]:
+                item[data_key] = item[data_key][:-1]
+                item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"] = item[f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"][:-1]
+                pad_to_horizon(item, data_key, self._horizon)
         return self._item_to_tensors(item)
 
     def get_data_by_key(self, key: str) -> torch.Tensor:
         """Returns all data for a given data key as a Tensor."""
         return torch.from_numpy(self._data[key][self._data[OnlineBuffer.OCCUPANCY_MASK_KEY]])
+
+def pad_to_horizon(item, data_key, horizon):
+    if item[data_key].shape[0] != horizon:
+        pad = horizon - item[data_key].shape[0]
+        pad_shapes = tuple([(0, pad)] + (len(item[data_key].shape)-1)*[(0,0)])
+        item[data_key] = np.pad(item[data_key], pad_shapes)
+        pad_key = f"{data_key}{OnlineBuffer.IS_PAD_POSTFIX}"
+        pad_shapes = tuple([(0, pad)] + (len(item[pad_key].shape)-1)*[(0,0)])
+        item[pad_key] = np.pad(item[pad_key], pad_shapes, constant_values=True)
+        assert(item[data_key].shape[0] == horizon)
 
 
 def compute_sampler_weights(

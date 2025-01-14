@@ -45,8 +45,10 @@ def get_safe_torch_device(cfg_device: str, log: bool = False) -> torch.device:
     """Given a string, return a torch.device with checks on whether the device is available."""
     match cfg_device:
         case "cuda":
-            assert torch.cuda.is_available()
-            device = torch.device("cuda")
+            if torch.cuda.is_available():
+                device = torch.device("cuda")
+            else:
+                device = torch.device("cpu")
         case "mps":
             assert torch.backends.mps.is_available()
             device = torch.device("mps")

@@ -266,6 +266,8 @@ def record(
         seed = np.random.randint(0, 1e5)
         observation, info = env.reset(seed=seed)
 
+        previous_leader_pos = None
+
         while timestamp < episode_time_s:
             start_loop_t = time.perf_counter()
 
@@ -273,9 +275,14 @@ def record(
                 action = predict_action(observation, policy, device, use_amp)
             else:
                 leader_pos = robot.leader_arms.main.read("Present_Position")
-                action = process_action_from_leader(leader_pos)
+                leader_pos = process_action_from_leader(leader_pos)
+                if not (previous_leader_pos is None):
+                    action = leader_pos - previous_leader_pos
+                else:
+                    action = 0.0*leader_pos
 
             observation, reward, terminated, _, info = env.step(action)
+            previous_leader_pos = observation["agent_pos"]
 
             success = info.get("is_success", False)
             env_timestamp = info.get("timestamp", dataset.episode_buffer["size"] / fps)
@@ -507,7 +514,9 @@ if __name__ == "__main__":
     importlib.import_module(f"gym_{env_cfg.env.name}")
 
     def env_constructor():
-        return gym.make(env_cfg.env.handle, disable_env_checker=True, **env_cfg.env.gym)
+        package_name = f"gym_{env_cfg.env.name}"
+        gym_handle = f"{package_name}/{env_cfg.env.task}"
+        return gym.make(gym_handle, disable_env_checker=True, **env_cfg.env.gym)
 
     robot = None
     process_leader_actions_fn = None
